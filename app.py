@@ -21,7 +21,7 @@ ticker = st.sidebar.text_input(
 # Fixed training window
 period_history = 2  # YEARS (LOCKED)
 
-# Stop execution if no ticker entered
+# Stop execution if no ticker
 if not ticker:
     st.info("👈 Enter a stock ticker in the sidebar to begin.")
     st.stop()
@@ -48,18 +48,37 @@ df_train = data[['Date', 'Close']].rename(
     columns={"Date": "ds", "Close": "y"}
 )
 
-# Remove timezone (required for Prophet)
 df_train['ds'] = df_train['ds'].dt.tz_localize(None)
 
 # -------------------------------
 # Train Model & Forecast
 # -------------------------------
 with st.spinner("Generating forecast..."):
-    model = Prophet(daily_seasonality=True)
+    model = Prophet(
+        daily_seasonality=True,
+        weekly_seasonality=True,
+        changepoint_prior_scale=0.2  # higher = more reactive
+    )
     model.fit(df_train)
 
     future = model.make_future_dataframe(periods=30)
     forecast = model.predict(future)
+
+# -------------------------------
+# Determine Trend Direction
+# -------------------------------
+# Past outlook
+past_start = forecast['yhat'].iloc[0]
+past_end = forecast['yhat'].iloc[len(df_train) - 1]
+past_up = past_end > past_start
+
+# Future outlook
+future_start = forecast['yhat'].iloc[len(df_train) - 1]
+future_end = forecast['yhat'].iloc[-1]
+future_up = future_end > future_start
+
+past_color = "green" if past_up else "red"
+future_color = "green" if future_up else "red"
 
 # -------------------------------
 # Visualization
@@ -76,37 +95,27 @@ fig.add_trace(go.Scatter(
     line=dict(color="#1f77b4")
 ))
 
-# Model's Past Outlook (historical predictions)
+# Model's Past Outlook
 fig.add_trace(go.Scatter(
-    x=forecast['ds'].iloc[:-30],
-    y=forecast['yhat'].iloc[:-30],
-    name="Model Past Outlook",
-    line=dict(color="rgba(255,127,14,0.5)", dash="dash")
+    x=forecast['ds'].iloc[:len(df_train)],
+    y=forecast['yhat'].iloc[:len(df_train)],
+    name="Past Outlook",
+    line=dict(
+        color=past_color,
+        width=2
+    )
 ))
 
 # Future 30-Day Forecast
 fig.add_trace(go.Scatter(
-    x=forecast['ds'].iloc[-31:],
-    y=forecast['yhat'].iloc[-31:],
+    x=forecast['ds'].iloc[len(df_train) - 1:],
+    y=forecast['yhat'].iloc[len(df_train) - 1:],
     name="30-Day Forecast",
-    line=dict(color="#ff7f0e", dash="dot")
-))
-
-# Confidence Interval
-fig.add_trace(go.Scatter(
-    x=forecast['ds'],
-    y=forecast['yhat_upper'],
-    line=dict(width=0),
-    showlegend=False
-))
-
-fig.add_trace(go.Scatter(
-    x=forecast['ds'],
-    y=forecast['yhat_lower'],
-    fill='tonexty',
-    line=dict(width=0),
-    name="Confidence Interval",
-    opacity=0.2
+    line=dict(
+        color=future_color,
+        width=2,
+        dash="dot"
+    )
 ))
 
 # Layout
@@ -141,6 +150,5 @@ st.write(
     f"**${current_price:.2f}**."
 )
 
-st.info(
-    "💡 Tip: Scroll your mouse wheel while hovering over the chart to zoom in."
-)
+trend_text = "Bullish 📈" if future_up else "Bearish 📉"
+st.info(f"Model Outlook: **{trend_text}** over the next 30 days.")
