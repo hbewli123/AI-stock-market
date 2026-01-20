@@ -4,79 +4,143 @@ from prophet import Prophet
 import pandas as pd
 import plotly.graph_objects as go
 
-# Set page title
+# -------------------------------
+# Page Config
+# -------------------------------
 st.set_page_config(page_title="Stock Predictor", layout="wide")
-st.title("📈 Stock Market 30-Day stock price Outlook")
+st.title("📈 Stock Market 30-Day Stock Price Outlook")
 
-# 1. Sidebar for User Inputs
+# -------------------------------
+# Sidebar Input
+# -------------------------------
 ticker = st.sidebar.text_input(
     "Enter Stock Ticker",
     placeholder="e.g. AAPL, TSLA, NVDA"
 ).upper()
 
-period_history = st.sidebar.slider("Years of History to Train On", 1, 5, 2)
+# Fixed training window
+period_history = 2  # YEARS (LOCKED)
 
-# 2. Fetch Live Data
-# multi_level_index=False is critical for modern yfinance compatibility
-data = yf.download(ticker, period=f"{period_history}y", multi_level_index=False)
+# Stop execution if no ticker entered
+if not ticker:
+    st.info("👈 Enter a stock ticker in the sidebar to begin.")
+    st.stop()
 
-if not data.empty:
-    data.reset_index(inplace=True)
+# -------------------------------
+# Fetch Historical Data
+# -------------------------------
+data = yf.download(
+    ticker,
+    period=f"{period_history}y",
+    multi_level_index=False
+)
 
-    # 3. Prepare Data for Prophet
-    df_train = data[['Date', 'Close']]
-    df_train = df_train.rename(columns={"Date": "ds", "Close": "y"})
-    # Remove timezone so Prophet doesn't crash
-    df_train['ds'] = df_train['ds'].dt.tz_localize(None)
+if data.empty:
+    st.error("No data found. Please ensure the ticker symbol is correct.")
+    st.stop()
 
-    # 4. Model & Forecast
-    # We use st.spinner so the user knows the AI is working
-    with st.spinner('Generating 30-day outlook...'):
-        m = Prophet(daily_seasonality=True)
-        m.fit(df_train)
-        future = m.make_future_dataframe(periods=30)
-        forecast = m.predict(future)
+data.reset_index(inplace=True)
 
-    # 5. Visualize (Single Graph Container)
-    st.subheader(f"30-Day Prediction for {ticker.upper()}")
-    
-    fig = go.Figure()
+# -------------------------------
+# Prepare Data for Prophet
+# -------------------------------
+df_train = data[['Date', 'Close']].rename(
+    columns={"Date": "ds", "Close": "y"}
+)
 
-    # Historical Data Line
-    fig.add_trace(go.Scatter(
-        x=df_train['ds'], 
-        y=df_train['y'], 
-        name="Historical Price",
-        line=dict(color='#1f77b4')
-    ))
+# Remove timezone (required for Prophet)
+df_train['ds'] = df_train['ds'].dt.tz_localize(None)
 
-    # Predicted Data Line
-    fig.add_trace(go.Scatter(
-        x=forecast['ds'].iloc[-31:], # Focus on the last 30 days
-        y=forecast['yhat'].iloc[-31:], 
-        name="Predicted Outlook",
-        line=dict(color='#ff7f0e', dash='dot')
-    ))
+# -------------------------------
+# Train Model & Forecast
+# -------------------------------
+with st.spinner("Generating forecast..."):
+    model = Prophet(daily_seasonality=True)
+    model.fit(df_train)
 
-    # Update layout to support mouse-centered zooming
-    fig.update_layout(
-        hovermode="x unified",
-        xaxis_title="Date",
-        yaxis_title="Price (USD)",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    future = model.make_future_dataframe(periods=30)
+    forecast = model.predict(future)
+
+# -------------------------------
+# Visualization
+# -------------------------------
+st.subheader(f"📊 {ticker} — Past Outlook & 30-Day Forecast")
+
+fig = go.Figure()
+
+# Actual Historical Prices
+fig.add_trace(go.Scatter(
+    x=df_train['ds'],
+    y=df_train['y'],
+    name="Actual Price",
+    line=dict(color="#1f77b4")
+))
+
+# Model's Past Outlook (historical predictions)
+fig.add_trace(go.Scatter(
+    x=forecast['ds'].iloc[:-30],
+    y=forecast['yhat'].iloc[:-30],
+    name="Model Past Outlook",
+    line=dict(color="rgba(255,127,14,0.5)", dash="dash")
+))
+
+# Future 30-Day Forecast
+fig.add_trace(go.Scatter(
+    x=forecast['ds'].iloc[-31:],
+    y=forecast['yhat'].iloc[-31:],
+    name="30-Day Forecast",
+    line=dict(color="#ff7f0e", dash="dot")
+))
+
+# Confidence Interval
+fig.add_trace(go.Scatter(
+    x=forecast['ds'],
+    y=forecast['yhat_upper'],
+    line=dict(width=0),
+    showlegend=False
+))
+
+fig.add_trace(go.Scatter(
+    x=forecast['ds'],
+    y=forecast['yhat_lower'],
+    fill='tonexty',
+    line=dict(width=0),
+    name="Confidence Interval",
+    opacity=0.2
+))
+
+# Layout
+fig.update_layout(
+    hovermode="x unified",
+    xaxis_title="Date",
+    yaxis_title="Price (USD)",
+    legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="right",
+        x=1
     )
+)
 
-    # Display the chart with scrollZoom enabled
-    st.plotly_chart(
-        fig, 
-        config={'scrollZoom': True}, 
-        use_container_width=True, 
-        key="stock_chart_main"
-    )
+# Render Chart
+st.plotly_chart(
+    fig,
+    use_container_width=True,
+    config={"scrollZoom": True},
+    key="stock_chart_main"
+)
 
-    # 6. Data Summary
-    st.write(f"The current price of **{ticker}** is approximately **${data['Close'].iloc[-1]:.2f}**.")
-    st.info("Tip: Use your **mouse scroll wheel** while hovering over the chart to zoom in on specific price action.")
+# -------------------------------
+# Summary
+# -------------------------------
+current_price = data['Close'].iloc[-1]
 
-else:
-    st.error("No data found. Please ensure the ticker symbol (e.g., TSLA, NVDA) is correct.")
+st.write(
+    f"The current price of **{ticker}** is approximately "
+    f"**${current_price:.2f}**."
+)
+
+st.info(
+    "💡 Tip: Scroll your mouse wheel while hovering over the chart to zoom in."
+)
