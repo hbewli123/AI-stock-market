@@ -7,26 +7,30 @@ import plotly.graph_objects as go
 st.title("Stock Market 30-Day Outlook")
 
 # 1. User Input for Ticker
-ticker = st.text_input("Enter Stock Ticker (e.g., AAPL, NVDA, TSLA)", "AAPL")
+ticker = st.text_input("Enter Stock Ticker", "Ex: TSLA")
 
-# 2. Fetch Live Data
-data = yf.download(ticker, period="2y")
-data.reset_index(inplace=True)
+# 2. Fetch Live Data - Added multi_level_index=False to fix the TypeError
+data = yf.download(ticker, period="2y", multi_level_index=False)
 
-# 3. Prepare Data for Prophet (Needs columns 'ds' and 'y')
-df_train = data[['Date', 'Close']]
-df_train = df_train.rename(columns={"Date": "ds", "Close": "y"})
-df_train['ds'] = df_train['ds'].dt.tz_localize(None) # Remove timezone for Prophet
+if not data.empty:
+    data.reset_index(inplace=True)
 
-# 4. Model & Forecast
-m = Prophet(daily_seasonality=True)
-m.fit(df_train)
-future = m.make_future_dataframe(periods=30) # The 30-day "Outlook"
-forecast = m.predict(future)
+    # 3. Prepare Data for Prophet
+    df_train = data[['Date', 'Close']]
+    df_train = df_train.rename(columns={"Date": "ds", "Close": "y"})
+    df_train['ds'] = df_train['ds'].dt.tz_localize(None)
 
-# 5. Visualize with Plotly
-st.subheader(f"Next 30 Days Forecast for {ticker}")
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df_train['ds'], y=df_train['y'], name="Historical"))
-fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], name="Predicted"))
-st.plotly_chart(fig)
+    # 4. Model & Forecast
+    m = Prophet(daily_seasonality=True)
+    m.fit(df_train)
+    future = m.make_future_dataframe(periods=30)
+    forecast = m.predict(future)
+
+    # 5. Visualize
+    st.subheader(f"Next 30 Days Forecast for {ticker}")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df_train['ds'], y=df_train['y'], name="Historical"))
+    fig.add_trace(go.Scatter(x=forecast['ds'], y=forecast['yhat'], name="Predicted Outlook"))
+    st.plotly_chart(fig)
+else:
+    st.error("No data found for this ticker. Please check the symbol.")
