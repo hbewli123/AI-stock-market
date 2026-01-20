@@ -21,7 +21,6 @@ ticker = st.sidebar.text_input(
 # Fixed training window
 period_history = 2  # YEARS (LOCKED)
 
-# Stop execution if no ticker
 if not ticker:
     st.info("👈 Enter a stock ticker in the sidebar to begin.")
     st.stop()
@@ -47,17 +46,16 @@ data.reset_index(inplace=True)
 df_train = data[['Date', 'Close']].rename(
     columns={"Date": "ds", "Close": "y"}
 )
-
 df_train['ds'] = df_train['ds'].dt.tz_localize(None)
 
 # -------------------------------
-# Train Model & Forecast
+# Train Model & Forecast (PROPHET)
 # -------------------------------
 with st.spinner("Generating forecast..."):
     model = Prophet(
         daily_seasonality=True,
         weekly_seasonality=True,
-        changepoint_prior_scale=0.2  # higher = more reactive
+        changepoint_prior_scale=0.2
     )
     model.fit(df_train)
 
@@ -65,14 +63,12 @@ with st.spinner("Generating forecast..."):
     forecast = model.predict(future)
 
 # -------------------------------
-# Determine Trend Direction
+# Trend Direction (Green / Red)
 # -------------------------------
-# Past outlook
 past_start = forecast['yhat'].iloc[0]
 past_end = forecast['yhat'].iloc[len(df_train) - 1]
 past_up = past_end > past_start
 
-# Future outlook
 future_start = forecast['yhat'].iloc[len(df_train) - 1]
 future_end = forecast['yhat'].iloc[-1]
 future_up = future_end > future_start
@@ -81,13 +77,26 @@ past_color = "green" if past_up else "red"
 future_color = "green" if future_up else "red"
 
 # -------------------------------
+# Percent Gain Calculations
+# -------------------------------
+current_price = data['Close'].iloc[-1]
+
+def percent_gain(days):
+    predicted_price = forecast['yhat'].iloc[len(df_train) - 1 + days]
+    return ((predicted_price - current_price) / current_price) * 100
+
+gain_5 = percent_gain(5)
+gain_10 = percent_gain(10)
+gain_30 = percent_gain(30)
+
+# -------------------------------
 # Visualization
 # -------------------------------
 st.subheader(f"📊 {ticker} — Past Outlook & 30-Day Forecast")
 
 fig = go.Figure()
 
-# Actual Historical Prices
+# Actual Price
 fig.add_trace(go.Scatter(
     x=df_train['ds'],
     y=df_train['y'],
@@ -95,30 +104,22 @@ fig.add_trace(go.Scatter(
     line=dict(color="#1f77b4")
 ))
 
-# Model's Past Outlook
+# Past Outlook
 fig.add_trace(go.Scatter(
     x=forecast['ds'].iloc[:len(df_train)],
     y=forecast['yhat'].iloc[:len(df_train)],
     name="Past Outlook",
-    line=dict(
-        color=past_color,
-        width=2
-    )
+    line=dict(color=past_color, width=2)
 ))
 
-# Future 30-Day Forecast
+# Future Forecast
 fig.add_trace(go.Scatter(
     x=forecast['ds'].iloc[len(df_train) - 1:],
     y=forecast['yhat'].iloc[len(df_train) - 1:],
     name="30-Day Forecast",
-    line=dict(
-        color=future_color,
-        width=2,
-        dash="dot"
-    )
+    line=dict(color=future_color, width=2, dash="dot")
 ))
 
-# Layout
 fig.update_layout(
     hovermode="x unified",
     xaxis_title="Date",
@@ -132,7 +133,6 @@ fig.update_layout(
     )
 )
 
-# Render Chart
 st.plotly_chart(
     fig,
     use_container_width=True,
@@ -141,10 +141,33 @@ st.plotly_chart(
 )
 
 # -------------------------------
+# Metrics Display
+# -------------------------------
+st.subheader("📈 Predicted Returns")
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric(
+    "5-Day Outlook",
+    f"{gain_5:.2f}%",
+    delta=f"{gain_5:.2f}%"
+)
+
+col2.metric(
+    "10-Day Outlook",
+    f"{gain_10:.2f}%",
+    delta=f"{gain_10:.2f}%"
+)
+
+col3.metric(
+    "30-Day Outlook",
+    f"{gain_30:.2f}%",
+    delta=f"{gain_30:.2f}%"
+)
+
+# -------------------------------
 # Summary
 # -------------------------------
-current_price = data['Close'].iloc[-1]
-
 st.write(
     f"The current price of **{ticker}** is approximately "
     f"**${current_price:.2f}**."
@@ -152,3 +175,4 @@ st.write(
 
 trend_text = "Bullish 📈" if future_up else "Bearish 📉"
 st.info(f"Model Outlook: **{trend_text}** over the next 30 days.")
+
