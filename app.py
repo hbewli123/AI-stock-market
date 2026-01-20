@@ -1,174 +1,118 @@
 import streamlit as st
 import yfinance as yf
-from prophet import Prophet
 import pandas as pd
-import plotly.graph_objects as go
+from prophet import Prophet
+import requests
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-# -------------------------------
-# Page Config
-# -------------------------------
-st.set_page_config(page_title="Stock Predictor", layout="wide")
-st.title("📈 Stock Market 30-Day Stock Price Outlook")
+# Set page
+st.title("Stock Predictor with News Sentiment")
 
-# -------------------------------
-# Sidebar Input
-# -------------------------------
-ticker = st.sidebar.text_input(
-    "Enter Stock Ticker",
-    placeholder="e.g. AAPL, TSLA, NVDA"
-).upper()
-
-# Fixed training window
-period_history = 2  # YEARS (LOCKED)
+# Input ticker
+ticker = st.text_input("Enter Stock Ticker", "AAPL").upper()
 
 if not ticker:
-    st.info("👈 Enter a stock ticker in the sidebar to begin.")
     st.stop()
 
-# -------------------------------
-# Fetch Historical Data
-# -------------------------------
-data = yf.download(
-    ticker,
-    period=f"{period_history}y",
-    multi_level_index=False
-)
+# Fetch price data
+period_history = 2
+data = yf.download(ticker, period=f"{period_history}y", progress=False)
 
 if data.empty:
-    st.error("No data found. Please ensure the ticker symbol is correct.")
+    st.error("No price data found for ticker.")
     st.stop()
 
 data.reset_index(inplace=True)
 
-# -------------------------------
-# Prepare Data for Prophet
-# -------------------------------
-df_train = data[['Date', 'Close']].rename(
-    columns={"Date": "ds", "Close": "y"}
-)
-df_train['ds'] = df_train['ds'].dt.tz_localize(None)
-
-# -------------------------------
-# Train Model & Forecast (PROPHET)
-# -------------------------------
-with st.spinner("Generating forecast..."):
-    model = Prophet(
-        daily_seasonality=True,
-        weekly_seasonality=True,
-        changepoint_prior_scale=0.2
+# Fetch news headlines for last 60 days using NewsAPI (replace with your API key)
+NEWS_API_KEY = "YOUR_NEWSAPI_KEY"  # You must get your own key from https://newsapi.org/
+def fetch_news(ticker):
+    url = (
+        f"https://newsapi.org/v2/everything?"
+        f"q={ticker}&"
+        f"from={(pd.Timestamp.today() - pd.Timedelta(days=60)).strftime('%Y-%m-%d')}&"
+        f"sortBy=publishedAt&"
+        f"language=en&"
+        f"apiKey={NEWS_API_KEY}"
     )
-    model.fit(df_train)
+    response = requests.get(url)
+    if response.status_code != 200:
+        return []
+    articles = response.json().get("articles", [])
+    return articles
 
-    future = model.make_future_dataframe(periods=30)
-    forecast = model.predict(future)
+news_articles = fetch_news(ticker)
+st.write(f"Fetched {len(news_articles)} news articles")
 
-# -------------------------------
-# Trend Direction
-# -------------------------------
-past_start = forecast['yhat'].iloc[0]
-past_end = forecast['yhat'].iloc[len(df_train) - 1]
-past_up = past_end > past_start
+# Prepare sentiment analyzer
+analyzer = SentimentIntensityAnalyzer()
 
-future_start = forecast['yhat'].iloc[len(df_train) - 1]
-future_end = forecast['yhat'].iloc[-1]
-future_up = future_end > future_start
+# Aggregate sentiment scores by date
+sentiment_by_date = {}
 
-past_color = "green" if past_up else "red"
-future_color = "green" if future_up else "red"
+for article in news_articles:
+    date = pd.to_datetime(article["publishedAt"]).date()
+    score = analyzer.polarity_scores(article["title"])["compound"]
+    if date not in sentiment_by_date:
+        sentiment_by_date[date] = []
+    sentiment_by_date[date].append(score)
 
-# -------------------------------
-# Percent Gain + Price Targets
-# -------------------------------
-current_price = data['Close'].iloc[-1]
+# Average sentiment per day
+sentiment_df = pd.DataFrame([
+    {"ds": pd.to_datetime(date), "sentiment": sum(scores)/len(scores)}
+    for date, scores in sentiment_by_date.items()
+])
 
-def predicted_price(days):
-    return forecast['yhat'].iloc[len(df_train) - 1 + days]
+# Merge with price data dates
+price_df = data[['Date', 'Close']].rename(columns={"Date": "ds", "Close": "y"})
+price_df['ds'] = pd.to_datetime(price_df['ds'])
+price_df = price_df.sort_values('ds')
 
-def percent_gain(days):
-    return ((predicted_price(days) - current_price) / current_price) * 100
+# Merge sentiment into price_df (fill missing sentiment with 0)
+price_df = price_df.merge(sentiment_df, on='ds', how='left')
+price_df['sentiment'] = price_df['sentiment'].fillna(0)
 
-price_5, price_10, price_30 = (
-    predicted_price(5),
-    predicted_price(10),
-    predicted_price(30)
-)
+# Build Prophet model with sentiment regressor
+model = Prophet()
+model.add_regressor('sentiment')
 
-gain_5, gain_10, gain_30 = (
-    percent_gain(5),
-    percent_gain(10),
-    percent_gain(30)
-)
+with st.spinner("Training Prophet with sentiment regressor..."):
+    model.fit(price_df)
 
-# -------------------------------
-# Visualization
-# -------------------------------
-st.subheader(f"📊 {ticker} — Past Outlook & 30-Day Forecast")
+# Make future dataframe and fill future sentiment with 0 (no news)
+future = model.make_future_dataframe(periods=30)
+future = future.merge(sentiment_df, on='ds', how='left')
+future['sentiment'] = future['sentiment'].fillna(0)
+
+forecast = model.predict(future)
+
+# Plot results
+import plotly.graph_objs as go
 
 fig = go.Figure()
 
-# Actual Price
 fig.add_trace(go.Scatter(
-    x=df_train['ds'],
-    y=df_train['y'],
-    name="Actual Price",
-    line=dict(color="#1f77b4")
+    x=price_df['ds'],
+    y=price_df['y'],
+    mode='lines',
+    name='Actual Price'
 ))
 
-# Past Outlook
 fig.add_trace(go.Scatter(
-    x=forecast['ds'].iloc[:len(df_train)],
-    y=forecast['yhat'].iloc[:len(df_train)],
-    name="Past Outlook",
-    line=dict(color=past_color, width=2)
+    x=forecast['ds'],
+    y=forecast['yhat'],
+    mode='lines',
+    name='Forecast with Sentiment'
 ))
 
-# Future Forecast
-fig.add_trace(go.Scatter(
-    x=forecast['ds'].iloc[len(df_train) - 1:],
-    y=forecast['yhat'].iloc[len(df_train) - 1:],
-    name="30-Day Forecast",
-    line=dict(color=future_color, width=2, dash="dot")
-))
+st.plotly_chart(fig, use_container_width=True)
 
-fig.update_layout(
-    hovermode="x unified",
-    xaxis_title="Date",
-    yaxis_title="Price (USD)",
-    legend=dict(
-        orientation="h",
-        yanchor="bottom",
-        y=1.02,
-        xanchor="right",
-        x=1
-    )
-)
+# Show sentiment examples
+st.subheader("Sample News Sentiment Scores")
 
-st.plotly_chart(
-    fig,
-    use_container_width=True,
-    config={"scrollZoom": True},
-    key="stock_chart_main"
-)
-
-# -------------------------------
-# Metrics
-# -------------------------------
-st.subheader("📈 Predicted Returns")
-
-col1, col2, col3 = st.columns(3)
-
-col1.metric("5-Day Outlook", f"${price_5:.2f}", f"{gain_5:.2f}%")
-col2.metric("10-Day Outlook", f"${price_10:.2f}", f"{gain_10:.2f}%")
-col3.metric("30-Day Outlook", f"${price_30:.2f}", f"{gain_30:.2f}%")
-
-# -------------------------------
-# Summary
-# -------------------------------
-st.write(
-    f"The current price of **{ticker}** is approximately "
-    f"**${current_price:.2f}**."
-)
-
-trend_text = "Bullish 📈" if future_up else "Bearish 📉"
-st.info(f"Model Outlook: **{trend_text}** over the next 30 days.")
+for i, article in enumerate(news_articles[:5]):
+    headline = article["title"]
+    date = article["publishedAt"]
+    score = analyzer.polarity_scores(headline)["compound"]
+    st.write(f"{date}: **{headline}** (Sentiment: {score:.2f})")
 
