@@ -63,7 +63,7 @@ with st.spinner("Generating forecast..."):
     forecast = model.predict(future)
 
 # -------------------------------
-# Trend Direction (Green / Red)
+# Trend Direction
 # -------------------------------
 past_start = forecast['yhat'].iloc[0]
 past_end = forecast['yhat'].iloc[len(df_train) - 1]
@@ -77,17 +77,27 @@ past_color = "green" if past_up else "red"
 future_color = "green" if future_up else "red"
 
 # -------------------------------
-# Percent Gain Calculations
+# Percent Gain + Price Targets
 # -------------------------------
 current_price = data['Close'].iloc[-1]
 
-def percent_gain(days):
-    predicted_price = forecast['yhat'].iloc[len(df_train) - 1 + days]
-    return ((predicted_price - current_price) / current_price) * 100
+def predicted_price(days):
+    return forecast['yhat'].iloc[len(df_train) - 1 + days]
 
-gain_5 = percent_gain(5)
-gain_10 = percent_gain(10)
-gain_30 = percent_gain(30)
+def percent_gain(days):
+    return ((predicted_price(days) - current_price) / current_price) * 100
+
+price_5, price_10, price_30 = (
+    predicted_price(5),
+    predicted_price(10),
+    predicted_price(30)
+)
+
+gain_5, gain_10, gain_30 = (
+    percent_gain(5),
+    percent_gain(10),
+    percent_gain(30)
+)
 
 # -------------------------------
 # Visualization
@@ -141,29 +151,15 @@ st.plotly_chart(
 )
 
 # -------------------------------
-# Metrics Display
+# Metrics
 # -------------------------------
 st.subheader("📈 Predicted Returns")
 
 col1, col2, col3 = st.columns(3)
 
-col1.metric(
-    "5-Day Outlook",
-    f"{gain_5:.2f}%",
-    delta=f"{gain_5:.2f}%"
-)
-
-col2.metric(
-    "10-Day Outlook",
-    f"{gain_10:.2f}%",
-    delta=f"{gain_10:.2f}%"
-)
-
-col3.metric(
-    "30-Day Outlook",
-    f"{gain_30:.2f}%",
-    delta=f"{gain_30:.2f}%"
-)
+col1.metric("5-Day Outlook", f"${price_5:.2f}", f"{gain_5:.2f}%")
+col2.metric("10-Day Outlook", f"${price_10:.2f}", f"{gain_10:.2f}%")
+col3.metric("30-Day Outlook", f"${price_30:.2f}", f"{gain_30:.2f}%")
 
 # -------------------------------
 # Summary
