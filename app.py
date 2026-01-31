@@ -115,16 +115,16 @@ def get_market_indicators(ticker):
 
 def calculate_market_adjustment(sentiment_score, indicators):
     """Calculate price adjustment based on sentiment and market indicators"""
-    # Weighted combination of factors
+    # Weighted combination of factors with reduced weights
     adjustment = (
-        sentiment_score * 0.35 +  # News sentiment (35%)
-        indicators['analyst_sentiment'] * 0.25 +  # Analyst sentiment (25%)
-        np.clip(indicators['volume_trend'], -0.5, 0.5) * 0.2 +  # Volume trend (20%)
-        np.clip(indicators['price_momentum'], -0.5, 0.5) * 0.2  # Price momentum (20%)
+        sentiment_score * 0.25 +  # News sentiment (25%, reduced from 35%)
+        indicators['analyst_sentiment'] * 0.20 +  # Analyst sentiment (20%, reduced from 25%)
+        np.clip(indicators['volume_trend'], -0.3, 0.3) * 0.15 +  # Volume trend (15%, reduced and clipped)
+        np.clip(indicators['price_momentum'], -0.3, 0.3) * 0.15  # Price momentum (15%, reduced and clipped)
     )
     
-    # Scale adjustment to reasonable percentage (-8% to +8%)
-    return np.clip(adjustment * 0.08, -0.08, 0.08)
+    # Scale adjustment to much more conservative percentage (-3% to +3%)
+    return np.clip(adjustment * 0.03, -0.03, 0.03)
 
 # -------------------------------
 # Sidebar Input
@@ -183,15 +183,17 @@ df_train.loc[df_train.index[-recent_rows:], 'market_strength'] = market_adjustme
 # -------------------------------
 with st.spinner("Generating enhanced forecast..."):
     model = Prophet(
-        daily_seasonality=True,
+        daily_seasonality=False,  # Disable daily seasonality for less noise
         weekly_seasonality=True,
         yearly_seasonality=True,
-        changepoint_prior_scale=0.15,
-        seasonality_mode='multiplicative'
+        changepoint_prior_scale=0.05,  # Reduced from 0.15 for more stable predictions
+        seasonality_mode='additive',  # Changed from multiplicative for stability
+        interval_width=0.80,  # Narrower confidence intervals
+        changepoint_range=0.9  # Only fit changepoints to first 90% of data
     )
     
-    # Add market strength regressor
-    model.add_regressor('market_strength', prior_scale=0.5)
+    # Add market strength regressor with lower prior scale
+    model.add_regressor('market_strength', prior_scale=0.3)
     
     model.fit(df_train)
 
@@ -203,17 +205,18 @@ with st.spinner("Generating enhanced forecast..."):
     
     forecast = model.predict(future)
     
-    # Apply graduated adjustment to future predictions (stronger effect in near term)
+    # Apply much more conservative graduated adjustment to future predictions
     for i in range(365):
         idx = len(df_train) + i
         if idx < len(forecast):
-            # Decay factor: stronger effect in short term, weaker in long term
-            decay = 1.0 - (i / 365.0)  # Decays over 365 days
-            adjustment_factor = 1 + (market_adjustment * decay)
+            # Much slower decay factor for stability
+            decay = max(0.2, 1.0 - (i / 730.0))  # Decays slowly over 2 years, min 20%
+            # Reduce adjustment impact significantly
+            adjustment_factor = 1 + (market_adjustment * decay * 0.3)  # 30% of original impact
             
             forecast.loc[idx, 'yhat'] *= adjustment_factor
-            forecast.loc[idx, 'yhat_lower'] *= (1 + market_adjustment * decay * 0.5)
-            forecast.loc[idx, 'yhat_upper'] *= (1 + market_adjustment * decay * 1.5)
+            forecast.loc[idx, 'yhat_lower'] *= (1 + market_adjustment * decay * 0.15)
+            forecast.loc[idx, 'yhat_upper'] *= (1 + market_adjustment * decay * 0.45)
 
 # -------------------------------
 # Trend Direction
@@ -398,3 +401,4 @@ st.info(f"Model Outlook: **{trend_text}** over the next year (Confidence: {confi
 
 # Add disclaimer
 st.caption("⚠️ This forecast incorporates news sentiment, analyst ratings, volume trends, and price momentum. Trained on 10 years of data. Not financial advice. Past performance doesn't guarantee future results.")
+
