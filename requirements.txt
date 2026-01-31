@@ -3,4 +3,4 @@ yfinance
 prophet
 pandas
 plotly
-vaderSentiment
+numpy
