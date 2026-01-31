@@ -10,7 +10,7 @@ import numpy as np
 # Page Config
 # -------------------------------
 st.set_page_config(page_title="Stock Predictor", layout="wide")
-st.title("📈 Stock Market 30-Day Stock Price Outlook")
+st.title("📈 Stock Market 1-Year Stock Price Outlook")
 
 # -------------------------------
 # Helper Functions
@@ -135,7 +135,7 @@ ticker = st.sidebar.text_input(
 ).upper()
 
 # Fixed training window
-period_history = 2  # YEARS (LOCKED)
+period_history = 10  # YEARS (LOCKED)
 
 if not ticker:
     st.info("👈 Enter a stock ticker in the sidebar to begin.")
@@ -195,7 +195,7 @@ with st.spinner("Generating enhanced forecast..."):
     
     model.fit(df_train)
 
-    future = model.make_future_dataframe(periods=30)
+    future = model.make_future_dataframe(periods=365)
     
     # Extend market strength to future predictions
     future['market_strength'] = 0.0
@@ -204,11 +204,11 @@ with st.spinner("Generating enhanced forecast..."):
     forecast = model.predict(future)
     
     # Apply graduated adjustment to future predictions (stronger effect in near term)
-    for i in range(30):
+    for i in range(365):
         idx = len(df_train) + i
         if idx < len(forecast):
             # Decay factor: stronger effect in short term, weaker in long term
-            decay = 1.0 - (i / 60.0)  # Decays over 60 days
+            decay = 1.0 - (i / 365.0)  # Decays over 365 days
             adjustment_factor = 1 + (market_adjustment * decay)
             
             forecast.loc[idx, 'yhat'] *= adjustment_factor
@@ -240,22 +240,24 @@ def predicted_price(days):
 def percent_gain(days):
     return ((predicted_price(days) - current_price) / current_price) * 100
 
-price_5, price_10, price_30 = (
-    predicted_price(5),
-    predicted_price(10),
-    predicted_price(30)
+price_15, price_30, price_90, price_365 = (
+    predicted_price(15),
+    predicted_price(30),
+    predicted_price(90),
+    predicted_price(365)
 )
 
-gain_5, gain_10, gain_30 = (
-    percent_gain(5),
-    percent_gain(10),
-    percent_gain(30)
+gain_15, gain_30, gain_90, gain_365 = (
+    percent_gain(15),
+    percent_gain(30),
+    percent_gain(90),
+    percent_gain(365)
 )
 
 # -------------------------------
 # Visualization
 # -------------------------------
-st.subheader(f"📊 {ticker} — Past Outlook & 30-Day Forecast")
+st.subheader(f"📊 {ticker} — Past Outlook & 1-Year Forecast")
 
 fig = go.Figure()
 
@@ -279,7 +281,7 @@ fig.add_trace(go.Scatter(
 fig.add_trace(go.Scatter(
     x=forecast['ds'].iloc[len(df_train) - 1:],
     y=forecast['yhat'].iloc[len(df_train) - 1:],
-    name="30-Day Forecast",
+    name="1-Year Forecast",
     line=dict(color=future_color, width=2, dash="dot")
 ))
 
@@ -330,11 +332,12 @@ st.plotly_chart(
 # -------------------------------
 st.subheader("📈 Predicted Returns")
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
-col1.metric("5-Day Outlook", f"${price_5:.2f}", f"{gain_5:.2f}%")
-col2.metric("10-Day Outlook", f"${price_10:.2f}", f"{gain_10:.2f}%")
-col3.metric("30-Day Outlook", f"${price_30:.2f}", f"{gain_30:.2f}%")
+col1.metric("15-Day Outlook", f"${price_15:.2f}", f"{gain_15:.2f}%")
+col2.metric("30-Day Outlook", f"${price_30:.2f}", f"{gain_30:.2f}%")
+col3.metric("90-Day Outlook", f"${price_90:.2f}", f"{gain_90:.2f}%")
+col4.metric("1-Year Outlook", f"${price_365:.2f}", f"{gain_365:.2f}%")
 
 # -------------------------------
 # Market Sentiment Indicators
@@ -391,7 +394,7 @@ signals = [
 alignment = abs(sum(signals))
 confidence_text = "High" if alignment >= 3 else "Moderate" if alignment >= 2 else "Low"
 
-st.info(f"Model Outlook: **{trend_text}** over the next 30 days (Confidence: {confidence_text}).")
+st.info(f"Model Outlook: **{trend_text}** over the next year (Confidence: {confidence_text}).")
 
 # Add disclaimer
-st.caption("⚠️ This forecast incorporates news sentiment, analyst ratings, volume trends, and price momentum. Not financial advice. Past performance doesn't guarantee future results.")
+st.caption("⚠️ This forecast incorporates news sentiment, analyst ratings, volume trends, and price momentum. Trained on 10 years of data. Not financial advice. Past performance doesn't guarantee future results.")
