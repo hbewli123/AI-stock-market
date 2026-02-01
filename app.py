@@ -112,26 +112,6 @@ def get_market_indicators(ticker, data):
     except Exception as e:
         return {'volume_trend': 0, 'analyst_sentiment': 0, 'price_momentum': 0, 'volatility': 0.02}
 
-def add_realistic_noise(predictions, base_volatility, days):
-    """Add realistic market noise to predictions"""
-    np.random.seed(42)  # Reproducible randomness
-    
-    noisy_predictions = []
-    for i, pred in enumerate(predictions):
-        # Daily volatility that compounds
-        daily_vol = base_volatility * np.sqrt(1 + i/365)  # Volatility increases with time
-        noise = np.random.normal(0, daily_vol)
-        
-        # Add some autocorrelation (markets trend)
-        if i > 0:
-            prev_change = (noisy_predictions[-1] - predictions[max(0, i-1)]) / predictions[max(0, i-1)]
-            noise += prev_change * 0.3  # 30% momentum carry-over
-        
-        noisy_pred = pred * (1 + noise)
-        noisy_predictions.append(noisy_pred)
-    
-    return noisy_predictions
-
 # -------------------------------
 # Sidebar Input
 # -------------------------------
@@ -190,33 +170,14 @@ else:
 # Train Prophet with Realistic Settings
 # -------------------------------
 with st.spinner("Generating forecast..."):
-    # Use Prophet to learn actual stock patterns
-    model = Prophet(
-        changepoint_prior_scale=0.25,  # More flexible to catch real trends
-        seasonality_prior_scale=1.0,
-        seasonality_mode='multiplicative',
-        daily_seasonality=False,
-        weekly_seasonality=True,
-        yearly_seasonality=True
-    )
-    
-    model.fit(df_train)
-    
-    future = model.make_future_dataframe(periods=365)
-    base_forecast = model.predict(future)
-    
-    # Get Prophet's actual prediction as starting point
-    prophet_predictions = base_forecast['yhat'].iloc[len(df_train):].values
-    current_price = data['Close'].iloc[-1]
-    
     # Calculate ACTUAL trend from the stock's recent behavior
     last_month = data['Close'].tail(30)
     last_quarter = data['Close'].tail(90)
     last_year = data['Close'].tail(252)  # Trading days
     
-    month_trend = (last_month.iloc[-1] - last_month.iloc[0]) / last_month.iloc[0]
-    quarter_trend = (last_quarter.iloc[-1] - last_quarter.iloc[0]) / last_quarter.iloc[0]
-    year_trend = (last_year.iloc[-1] - last_year.iloc[0]) / last_year.iloc[0]
+    month_trend = (last_month.iloc[-1] - last_month.iloc[0]) / last_month.iloc[0] if len(last_month) > 1 else 0
+    quarter_trend = (last_quarter.iloc[-1] - last_quarter.iloc[0]) / last_quarter.iloc[0] if len(last_quarter) > 1 else 0
+    year_trend = (last_year.iloc[-1] - last_year.iloc[0]) / last_year.iloc[0] if len(last_year) > 1 else 0
     
     # Weight recent performance more heavily
     momentum_score = (month_trend * 0.5 + quarter_trend * 0.3 + year_trend * 0.2)
@@ -229,29 +190,23 @@ with st.spinner("Generating forecast..."):
         market_indicators['price_momentum'] * 0.15
     )
     
-    # Build realistic predictions using Prophet base + actual trends
-    realistic_predictions = []
+    # Build predictions with simple growth/decline model
+    current_price = data['Close'].iloc[-1]
+    final_predictions = []
+    
+    # Calculate daily growth rate based on signal strength
+    # Cap at realistic annual returns (-30% to +50%)
+    annual_return = np.clip(signal_strength * 0.3, -0.3, 0.5)
+    daily_return = (1 + annual_return) ** (1/365) - 1
     
     for i in range(365):
-        # Start with Prophet's learned pattern
-        prophet_value = prophet_predictions[i]
+        # Simple compound growth
+        predicted_value = current_price * ((1 + daily_return) ** (i + 1))
         
-        # Add momentum-based drift
-        days_factor = (i + 1) / 365
+        # Ensure it's always positive
+        predicted_value = max(predicted_value, current_price * 0.5)  # Can't drop below 50% of current
         
-        # Decay the signal strength over time (less certain further out)
-        decayed_signal = signal_strength * (1 - days_factor * 0.4)
-        
-        # Apply the actual momentum with decay
-        trend_adjustment = decayed_signal * days_factor * 0.15  # Max 15% annual
-        
-        # Combine Prophet pattern with momentum
-        base_value = prophet_value * (1 + trend_adjustment)
-        
-        realistic_predictions.append(base_value)
-    
-    # Add realistic market volatility
-    final_predictions = add_realistic_noise(realistic_predictions, historical_volatility, 365)
+        final_predictions.append(predicted_value)
     
     # Create forecast dataframe
     last_date = data['Date'].iloc[-1]
@@ -394,7 +349,7 @@ with st.expander("📖 Methodology"):
     st.markdown(f"""
     **How This Forecast Works:**
     
-    - **Prophet Base:** Learns actual patterns from {period_history} years of {ticker} data
+    - **Momentum-Based Model:** Uses {ticker}'s actual recent performance to project future trend
     - **Recent Performance Analysis:**
       - Last Month Trend: {month_trend*100:.1f}%
       - Last Quarter Trend: {quarter_trend*100:.1f}%
@@ -402,13 +357,15 @@ with st.expander("📖 Methodology"):
     - **Momentum Score:** {momentum_score*100:.1f}% (weighted recent performance)
     - **Market Signals:** News ({sentiment_score:.2f}), Analysts ({market_indicators['analyst_sentiment']:.2f})
     - **Combined Signal Strength:** {signal_strength:.2f}
+    - **Projected Annual Return:** {annual_return*100:.1f}%
     
     **Unique to {ticker}:**
+    - Current price: ${current_price:.2f}
     - Historical volatility: {vol_pct:.2f}% daily
-    - Current momentum: {momentum_score*100:.1f}%
-    - This prediction is based on {ticker}'s actual behavior, not a generic template
+    - Momentum trend: {momentum_score*100:.1f}%
     
-    Each stock gets a unique forecast based on its own patterns, momentum, and market conditions.
+    Simple compound growth model: Each day's prediction builds on the previous day's value.
+    Predictions are always positive and follow the momentum trend smoothly.
     """)
 
-st.caption("⚠️ Forecast uses Prophet + stock-specific momentum analysis with realistic volatility. Not financial advice.")
+st.caption("⚠️ Momentum-based forecast using stock-specific trends and market signals. Not financial advice.")
