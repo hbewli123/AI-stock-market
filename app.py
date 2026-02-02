@@ -1,6 +1,5 @@
 import streamlit as st
 import yfinance as yf
-from prophet import Prophet
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
@@ -143,12 +142,6 @@ if data.empty:
 data.reset_index(inplace=True)
 
 # -------------------------------
-# Prepare Data for Prophet
-# -------------------------------
-df_train = data[['Date', 'Close']].rename(columns={"Date": "ds", "Close": "y"})
-df_train['ds'] = df_train['ds'].dt.tz_localize(None)
-
-# -------------------------------
 # Analyze Market Conditions
 # -------------------------------
 with st.spinner("Analyzing market conditions..."):
@@ -176,26 +169,6 @@ else:
 # Train Prophet and Use Upper Range
 # -------------------------------
 with st.spinner("Generating forecast..."):
-    # Train Prophet
-    model = Prophet(
-        changepoint_prior_scale=0.05,
-        seasonality_prior_scale=10,
-        seasonality_mode='multiplicative',
-        daily_seasonality=False,
-        weekly_seasonality=True,
-        yearly_seasonality=True,
-        interval_width=0.95
-    )
-    
-    model.fit(df_train)
-    
-    future = model.make_future_dataframe(periods=365)
-    forecast = model.predict(future)
-    
-    # Extract future predictions - USE THE UPPER BAND
-    future_forecast = forecast.iloc[len(df_train):].copy()
-    current_price = data['Close'].iloc[-1]
-    
     # Calculate ACTUAL trend from the stock's recent behavior
     last_month = data['Close'].tail(30)
     last_quarter = data['Close'].tail(90)
@@ -216,25 +189,22 @@ with st.spinner("Generating forecast..."):
         market_indicators['price_momentum'] * 0.15
     )
     
-    # Use upper band but adjust based on signal strength
+    current_price = data['Close'].iloc[-1]
+    
+    # Build smooth upward trend - keeping the high numbers
     final_predictions = []
     
-    for i in range(len(future_forecast)):
-        # Take the upper band value (this is the "optimistic" Prophet prediction)
-        upper_value = future_forecast['yhat_upper'].iloc[i]
-        base_value = future_forecast['yhat'].iloc[i]
-        
-        # Blend between base and upper based on signal strength
-        # Positive signals → use more of upper band
-        # Negative signals → use more of base prediction
-        blend_factor = 0.7 + (signal_strength * 0.3)  # 0.4 to 1.0
-        blend_factor = np.clip(blend_factor, 0.3, 1.0)
-        
-        predicted_value = base_value * (1 - blend_factor) + upper_value * blend_factor
-        
-        # Make sure it's always positive and reasonable
-        predicted_value = max(predicted_value, current_price * 0.5)
-        
+    # Annual growth rate - always optimistic, capped at realistic levels
+    base_annual_growth = max(0.10, abs(signal_strength) * 0.4)  # Minimum 10%, max ~40%
+    if signal_strength < 0:
+        base_annual_growth = max(0.05, abs(signal_strength) * 0.2)  # Even bearish shows growth
+    
+    # Daily compounding
+    daily_growth = (1 + base_annual_growth) ** (1/365) - 1
+    
+    for i in range(365):
+        # Smooth exponential growth
+        predicted_value = current_price * ((1 + daily_growth) ** (i + 1))
         final_predictions.append(predicted_value)
     
     # Create forecast dataframe
@@ -378,9 +348,7 @@ with st.expander("📖 Methodology"):
     st.markdown(f"""
     **How This Forecast Works:**
     
-    - **Prophet Model:** Trained on 10 years of {ticker} historical data
-    - **Upper Band Strategy:** Uses Prophet's optimistic range as the baseline prediction
-    - **Signal Adjustment:** Blends base and upper predictions based on market strength
+    - **Optimistic Growth Model:** Shows smooth upward trend based on market signals
     - **Recent Performance Analysis:**
       - Last Month Trend: {month_trend*100:.1f}%
       - Last Quarter Trend: {quarter_trend*100:.1f}%
@@ -388,13 +356,14 @@ with st.expander("📖 Methodology"):
     - **Momentum Score:** {momentum_score*100:.1f}% (weighted recent performance)
     - **Market Signals:** News ({sentiment_score:.2f}), Analysts ({market_indicators['analyst_sentiment']:.2f})
     - **Combined Signal Strength:** {signal_strength:.2f}
+    - **Annual Growth Rate:** {base_annual_growth*100:.1f}%
     
     **Unique to {ticker}:**
     - Current price: ${current_price:.2f}
     - Historical volatility: {vol_pct:.2f}% daily
     - Momentum trend: {momentum_score*100:.1f}%
     
-    The model learns {ticker}'s patterns and shows realistic upward/downward trends.
+    Smooth exponential growth projection - keeps the high range for optimistic outlook.
     """)
 
-st.caption("⚠️ Prophet-based forecast using upper confidence range adjusted by market signals. Not financial advice.")
+st.caption("⚠️ Optimistic growth model based on momentum and market signals. Not financial advice.")
