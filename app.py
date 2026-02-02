@@ -397,5 +397,4 @@ with st.expander("📖 Methodology"):
     The model learns {ticker}'s patterns and shows realistic upward/downward trends.
     """)
 
-
-
+st.caption("⚠️ Prophet-based forecast using upper confidence range adjusted by market signals. Not financial advice.")
