@@ -191,10 +191,10 @@ with st.spinner("Generating forecast..."):
     
     current_price = data['Close'].iloc[-1]
     
-    # Build smooth upward trend - keeping the high numbers
-    final_predictions = []
+    # Build smooth upward trend with realistic fluctuations
+    base_predictions = []
     
-    # Annual growth rate - always optimistic, capped at realistic levels
+    # Annual growth rate - always optimistic
     base_annual_growth = max(0.10, abs(signal_strength) * 0.4)  # Minimum 10%, max ~40%
     if signal_strength < 0:
         base_annual_growth = max(0.05, abs(signal_strength) * 0.2)  # Even bearish shows growth
@@ -203,9 +203,33 @@ with st.spinner("Generating forecast..."):
     daily_growth = (1 + base_annual_growth) ** (1/365) - 1
     
     for i in range(365):
-        # Smooth exponential growth
+        # Smooth exponential growth baseline
         predicted_value = current_price * ((1 + daily_growth) ** (i + 1))
-        final_predictions.append(predicted_value)
+        base_predictions.append(predicted_value)
+    
+    # Add realistic daily fluctuations (like actual stock movements)
+    np.random.seed(42)  # Reproducible
+    final_predictions = []
+    
+    for i in range(365):
+        base = base_predictions[i]
+        
+        # Add daily noise based on historical volatility
+        daily_volatility = historical_volatility * 0.8  # Slightly reduce for smoother look
+        
+        # Random daily change
+        daily_change = np.random.normal(0, daily_volatility)
+        
+        # Add momentum (stocks trend, not pure random walk)
+        if i > 0:
+            prev_change = (final_predictions[-1] - base_predictions[max(0, i-1)]) / base_predictions[max(0, i-1)]
+            daily_change += prev_change * 0.4  # 40% momentum carry-over
+        
+        # Apply the fluctuation
+        noisy_value = base * (1 + daily_change)
+        
+        # Keep it generally upward but with realistic dips
+        final_predictions.append(noisy_value)
     
     # Create forecast dataframe
     last_date = data['Date'].iloc[-1]
