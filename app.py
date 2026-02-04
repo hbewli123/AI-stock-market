@@ -376,8 +376,8 @@ with st.spinner("Generating forecast..."):
     for i in range(365):
         base = base_predictions[i]
         
-        # Add daily noise based on historical volatility (reduced)
-        daily_volatility = historical_volatility * 0.5  # Cut volatility in half for cleaner look
+        # Normal volatility for green forecast
+        daily_volatility = historical_volatility * 0.8  # Back to normal
         
         # Random daily change
         daily_change = np.random.normal(0, daily_volatility)
@@ -385,7 +385,7 @@ with st.spinner("Generating forecast..."):
         # Add momentum (stocks trend, not pure random walk)
         if i > 0:
             prev_change = (final_predictions[-1] - base_predictions[max(0, i-1)]) / base_predictions[max(0, i-1)]
-            daily_change += prev_change * 0.4  # 40% momentum carry-over
+            daily_change += prev_change * 0.4  # Normal momentum
         
         # Apply the fluctuation
         noisy_value = base * (1 + daily_change)
@@ -462,8 +462,8 @@ for i in range(len(data) - 365):
             daily_growth = (1 + h_annual_growth) ** (1/365) - 1
             predicted = base_price * ((1 + daily_growth) ** days_ahead)
             
-            # Add realistic prediction error (3-4% variance for cleaner look)
-            prediction_error = np.random.normal(0, 0.035)  # ~3.5% std deviation
+            # Add minimal prediction error - less volatile than green forecast
+            prediction_error = np.random.normal(0, 0.015)  # Only 1.5% std deviation (less than green)
             predicted = predicted * (1 + prediction_error)
             
             backtest_predictions.append(predicted)
@@ -675,9 +675,6 @@ with st.expander("📖 Methodology"):
     - Momentum trend: {momentum_score*100:.1f}%
     
     Smooth exponential growth projection - keeps the high range for optimistic outlook.
-    """)
-
-st.caption("⚠️ Optimistic growth model based on momentum and market signals. Not financial advice.")
     """)
 
 st.caption("⚠️ Optimistic growth model based on momentum and market signals. Not financial advice.")
