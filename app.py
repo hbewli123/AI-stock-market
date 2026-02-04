@@ -434,32 +434,33 @@ past_color = "green" if data['Close'].iloc[-1] > data['Close'].iloc[0] else "red
 backtest_predictions = []
 backtest_dates = []
 
-if len(data) >= 365:
-    # Generate predictions for the past year to show on chart
-    for i in range(365, 0, -1):
-        idx = len(data) - i
-        if idx >= 90:  # Need enough history
-            # Get historical data at this point
-            hist_30 = data['Close'].iloc[max(0, idx-30):idx]
-            hist_90 = data['Close'].iloc[max(0, idx-90):idx]
-            hist_365 = data['Close'].iloc[max(0, idx-365):idx]
+# Generate predictions for the entire historical period
+for i in range(len(data)):
+    if i >= 365:  # Need at least 1 year of history to make a prediction
+        # Get historical data up to this point
+        hist_30 = data['Close'].iloc[max(0, i-30):i]
+        hist_90 = data['Close'].iloc[max(0, i-90):i]
+        hist_365 = data['Close'].iloc[max(0, i-365):i]
+        
+        if len(hist_30) > 1 and len(hist_90) > 1 and len(hist_365) > 1:
+            h_month = (hist_30.iloc[-1] - hist_30.iloc[0]) / hist_30.iloc[0]
+            h_quarter = (hist_90.iloc[-1] - hist_90.iloc[0]) / hist_90.iloc[0]
+            h_year = (hist_365.iloc[-1] - hist_365.iloc[0]) / hist_365.iloc[0]
             
-            if len(hist_30) > 1 and len(hist_90) > 1:
-                h_month = (hist_30.iloc[-1] - hist_30.iloc[0]) / hist_30.iloc[0]
-                h_quarter = (hist_90.iloc[-1] - hist_90.iloc[0]) / hist_90.iloc[0]
-                h_year = (hist_365.iloc[-1] - hist_365.iloc[0]) / hist_365.iloc[0] if len(hist_365) > 1 else 0
-                
-                h_momentum = (h_month * 0.5 + h_quarter * 0.3 + h_year * 0.2)
-                h_annual_growth = max(0.10, abs(h_momentum) * 0.4)
-                if h_momentum < 0:
-                    h_annual_growth = max(0.05, abs(h_momentum) * 0.2)
-                
-                # Predict 30 days ahead from this point
-                base_price = data['Close'].iloc[idx]
-                predicted = base_price * (1 + h_annual_growth * (30/365))
-                
-                backtest_predictions.append(predicted)
-                backtest_dates.append(data['Date'].iloc[min(idx + 30, len(data) - 1)])
+            h_momentum = (h_month * 0.5 + h_quarter * 0.3 + h_year * 0.2)
+            h_annual_growth = max(0.10, abs(h_momentum) * 0.4)
+            if h_momentum < 0:
+                h_annual_growth = max(0.05, abs(h_momentum) * 0.2)
+            
+            # Predict 30 days ahead from this historical point
+            base_price = data['Close'].iloc[i]
+            
+            # Add daily fluctuations to historical predictions too
+            daily_growth = (1 + h_annual_growth) ** (1/365) - 1
+            predicted = base_price * ((1 + daily_growth) ** 30)
+            
+            backtest_predictions.append(predicted)
+            backtest_dates.append(data['Date'].iloc[i])
 
 # -------------------------------
 # Visualization
