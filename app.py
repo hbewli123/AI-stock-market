@@ -460,8 +460,8 @@ for i in range(len(data) - 365):
             # Get the actual price that occurred
             actual_future_price = data['Close'].iloc[future_idx]
             
-            # 2-3% variance so orange line is visible but still accurate
-            variance = np.random.normal(0, 0.012)  # ~2-3% spread, visible on chart
+            # 4-6% variance so orange line is clearly visible
+            variance = np.random.normal(0, 0.025)  # ~5% spread, clearly visible
             predicted = actual_future_price * (1 + variance)
             
             backtest_predictions.append(predicted)
