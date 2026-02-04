@@ -481,7 +481,7 @@ fig.add_trace(go.Scatter(
     x=data['Date'],
     y=data['Close'],
     name="Actual Price",
-    line=dict(color="#2E86DE", width=2),
+    line=dict(color="#FF0000", width=2),
     mode='lines'
 ))
 
