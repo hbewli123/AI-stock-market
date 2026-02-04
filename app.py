@@ -481,7 +481,7 @@ fig.add_trace(go.Scatter(
     x=data['Date'],
     y=data['Close'],
     name="Actual Price",
-    line=dict(color="#FF0000", width=2),
+    line=dict(color="#008000", width=2),
     mode='lines'
 ))
 
@@ -491,7 +491,7 @@ if len(backtest_predictions) > 0:
         x=backtest_dates,
         y=backtest_predictions,
         name="Past Predictions (Backtest)",
-        line=dict(color="#FFA500", width=1.5, dash='dot'),
+        line=dict(color="#FFFF00", width=1.5, dash='dot'),
         mode='lines',
         opacity=0.7
     ))
