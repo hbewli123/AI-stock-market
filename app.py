@@ -376,8 +376,8 @@ with st.spinner("Generating forecast..."):
     for i in range(365):
         base = base_predictions[i]
         
-        # Add daily noise based on historical volatility
-        daily_volatility = historical_volatility * 0.8  # Slightly reduce for smoother look
+        # Add daily noise based on historical volatility (reduced)
+        daily_volatility = historical_volatility * 0.5  # Cut volatility in half for cleaner look
         
         # Random daily change
         daily_change = np.random.normal(0, daily_volatility)
@@ -462,8 +462,8 @@ for i in range(len(data) - 365):
             daily_growth = (1 + h_annual_growth) ** (1/365) - 1
             predicted = base_price * ((1 + daily_growth) ** days_ahead)
             
-            # Add realistic prediction error (5-15% variance)
-            prediction_error = np.random.normal(0, 0.08)  # ~8% std deviation
+            # Add realistic prediction error (3-4% variance for cleaner look)
+            prediction_error = np.random.normal(0, 0.035)  # ~3.5% std deviation
             predicted = predicted * (1 + prediction_error)
             
             backtest_predictions.append(predicted)
@@ -675,6 +675,9 @@ with st.expander("📖 Methodology"):
     - Momentum trend: {momentum_score*100:.1f}%
     
     Smooth exponential growth projection - keeps the high range for optimistic outlook.
+    """)
+
+st.caption("⚠️ Optimistic growth model based on momentum and market signals. Not financial advice.")
     """)
 
 st.caption("⚠️ Optimistic growth model based on momentum and market signals. Not financial advice.")
