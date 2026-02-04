@@ -680,3 +680,5 @@ with st.expander("📖 Methodology"):
     Smooth exponential growth projection - keeps the high range for optimistic outlook.
     """)
 
+st.caption("⚠️ Optimistic growth model based on momentum and market signals. Not financial advice.")
+
