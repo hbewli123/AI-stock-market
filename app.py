@@ -434,7 +434,7 @@ past_color = "green" if data['Close'].iloc[-1] > data['Close'].iloc[0] else "red
 backtest_predictions = []
 backtest_dates = []
 
-# Generate predictions for the entire historical period
+# Generate predictions showing what we would have forecasted from each historical point
 for i in range(len(data)):
     if i >= 365:  # Need at least 1 year of history to make a prediction
         # Get historical data up to this point
@@ -452,15 +452,18 @@ for i in range(len(data)):
             if h_momentum < 0:
                 h_annual_growth = max(0.05, abs(h_momentum) * 0.2)
             
-            # Predict 30 days ahead from this historical point
+            # Show what we would have predicted for 1 year out from each point
             base_price = data['Close'].iloc[i]
+            days_ahead = min(365, len(data) - i - 1)  # Predict up to 1 year or end of data
             
-            # Add daily fluctuations to historical predictions too
-            daily_growth = (1 + h_annual_growth) ** (1/365) - 1
-            predicted = base_price * ((1 + daily_growth) ** 30)
-            
-            backtest_predictions.append(predicted)
-            backtest_dates.append(data['Date'].iloc[i])
+            if days_ahead > 0:
+                daily_growth = (1 + h_annual_growth) ** (1/365) - 1
+                predicted = base_price * ((1 + daily_growth) ** days_ahead)
+                
+                backtest_predictions.append(predicted)
+                # Date is where the prediction would land (future from that point)
+                future_idx = min(i + days_ahead, len(data) - 1)
+                backtest_dates.append(data['Date'].iloc[future_idx])
 
 # -------------------------------
 # Visualization
