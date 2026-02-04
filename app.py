@@ -437,7 +437,8 @@ backtest_dates = []
 np.random.seed(42)  # Reproducible variance
 
 # Generate predictions showing what we would have forecasted from each historical point
-for i in range(len(data)):
+# Stop 365 days before the end to avoid spike
+for i in range(len(data) - 365):
     if i >= 365:  # Need at least 1 year of history to make a prediction
         # Get historical data up to this point
         hist_30 = data['Close'].iloc[max(0, i-30):i]
@@ -456,20 +457,19 @@ for i in range(len(data)):
             
             # Show what we would have predicted for 1 year out from each point
             base_price = data['Close'].iloc[i]
-            days_ahead = min(365, len(data) - i - 1)  # Predict up to 1 year or end of data
+            days_ahead = 365  # Always predict 1 year ahead
             
-            if days_ahead > 0:
-                daily_growth = (1 + h_annual_growth) ** (1/365) - 1
-                predicted = base_price * ((1 + daily_growth) ** days_ahead)
-                
-                # Add realistic prediction error (5-15% variance)
-                prediction_error = np.random.normal(0, 0.08)  # ~8% std deviation
-                predicted = predicted * (1 + prediction_error)
-                
-                backtest_predictions.append(predicted)
-                # Date is where the prediction would land (future from that point)
-                future_idx = min(i + days_ahead, len(data) - 1)
-                backtest_dates.append(data['Date'].iloc[future_idx])
+            daily_growth = (1 + h_annual_growth) ** (1/365) - 1
+            predicted = base_price * ((1 + daily_growth) ** days_ahead)
+            
+            # Add realistic prediction error (5-15% variance)
+            prediction_error = np.random.normal(0, 0.08)  # ~8% std deviation
+            predicted = predicted * (1 + prediction_error)
+            
+            backtest_predictions.append(predicted)
+            # Date is where the prediction would land (1 year from that point)
+            future_idx = i + days_ahead
+            backtest_dates.append(data['Date'].iloc[future_idx])
 
 # -------------------------------
 # Visualization
@@ -675,9 +675,6 @@ with st.expander("📖 Methodology"):
     - Momentum trend: {momentum_score*100:.1f}%
     
     Smooth exponential growth projection - keeps the high range for optimistic outlook.
-    """)
-
-st.caption("⚠️ Optimistic growth model based on momentum and market signals. Not financial advice.")
     """)
 
 st.caption("⚠️ Optimistic growth model based on momentum and market signals. Not financial advice.")
