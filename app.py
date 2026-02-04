@@ -579,6 +579,73 @@ with col3:
 # -------------------------------
 st.write(f"Current price of **{ticker}**: **${current_price:.2f}**")
 
+# -------------------------------
+# Backtesting - How Did We Do?
+# -------------------------------
+st.subheader("📊 Historical Prediction Accuracy")
+
+# Get data from 1 year ago and test our prediction
+if len(data) >= 365:
+    # Get price from 1 year ago
+    year_ago_idx = len(data) - 365
+    year_ago_price = data['Close'].iloc[year_ago_idx]
+    actual_current = data['Close'].iloc[-1]
+    
+    # Calculate what our model would have predicted
+    past_30_days = data['Close'].iloc[year_ago_idx-30:year_ago_idx]
+    past_90_days = data['Close'].iloc[year_ago_idx-90:year_ago_idx]
+    past_365_days = data['Close'].iloc[max(0, year_ago_idx-365):year_ago_idx]
+    
+    past_month_trend = (past_30_days.iloc[-1] - past_30_days.iloc[0]) / past_30_days.iloc[0] if len(past_30_days) > 1 else 0
+    past_quarter_trend = (past_90_days.iloc[-1] - past_90_days.iloc[0]) / past_90_days.iloc[0] if len(past_90_days) > 1 else 0
+    past_year_trend = (past_365_days.iloc[-1] - past_365_days.iloc[0]) / past_365_days.iloc[0] if len(past_365_days) > 1 else 0
+    
+    past_momentum = (past_month_trend * 0.5 + past_quarter_trend * 0.3 + past_year_trend * 0.2)
+    
+    # Simulate what we would have predicted
+    simulated_annual_growth = max(0.10, abs(past_momentum) * 0.4)
+    if past_momentum < 0:
+        simulated_annual_growth = max(0.05, abs(past_momentum) * 0.2)
+    
+    predicted_current = year_ago_price * (1 + simulated_annual_growth)
+    
+    # Calculate accuracy
+    prediction_error = abs(predicted_current - actual_current) / actual_current * 100
+    actual_change_pct = (actual_current - year_ago_price) / year_ago_price * 100
+    predicted_change_pct = (predicted_current - year_ago_price) / year_ago_price * 100
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("1 Year Ago Price", f"${year_ago_price:.2f}")
+    
+    with col2:
+        st.metric("Our Prediction", f"${predicted_current:.2f}", f"{predicted_change_pct:+.1f}%")
+    
+    with col3:
+        st.metric("Actual Today", f"${actual_current:.2f}", f"{actual_change_pct:+.1f}%")
+    
+    with col4:
+        accuracy = 100 - prediction_error
+        accuracy_emoji = "🎯" if accuracy > 90 else "✅" if accuracy > 75 else "⚠️"
+        st.metric("Accuracy", f"{accuracy:.1f}%", f"{accuracy_emoji}")
+    
+    # Visual comparison
+    st.caption(f"💡 Our model predicted **{predicted_change_pct:+.1f}%** change vs actual **{actual_change_pct:+.1f}%** change")
+    
+    if accuracy > 85:
+        st.success("🎯 Excellent prediction accuracy!")
+    elif accuracy > 70:
+        st.info("✅ Good prediction accuracy")
+    else:
+        st.warning("⚠️ Moderate prediction accuracy - markets can be unpredictable")
+else:
+    st.info("Not enough historical data for backtesting (need at least 1 year)")
+
+# -------------------------------
+# Rest of Summary
+# -------------------------------
+
 trend_text = "Bullish 📈" if future_up else "Bearish 📉"
 expected_change = abs(gain_365)
 
