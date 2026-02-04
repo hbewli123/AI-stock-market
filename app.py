@@ -8,7 +8,22 @@ import numpy as np
 # -------------------------------
 # Page Config
 # -------------------------------
-st.set_page_config(page_title="Stock Predictor", layout="wide")
+st.set_page_config(
+    page_title="Stock Predictor", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Force light mode
+st.markdown("""
+    <style>
+        .stApp {
+            background-color: white;
+            color: black;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("📈 Stock Market 1-Year Stock Price Outlook")
 
 # -------------------------------
@@ -481,7 +496,7 @@ fig.add_trace(go.Scatter(
     x=data['Date'],
     y=data['Close'],
     name="Actual Price",
-    line=dict(color="#008000", width=2),
+    line=dict(color="#2E86DE", width=2),
     mode='lines'
 ))
 
@@ -491,7 +506,7 @@ if len(backtest_predictions) > 0:
         x=backtest_dates,
         y=backtest_predictions,
         name="Past Predictions (Backtest)",
-        line=dict(color="#FFFF00", width=1.5, dash='dot'),
+        line=dict(color="#FFA500", width=1.5, dash='dot'),
         mode='lines',
         opacity=0.7
     ))
@@ -510,7 +525,10 @@ fig.update_layout(
     xaxis_title="Date",
     yaxis_title="Price (USD)",
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    height=500
+    height=500,
+    plot_bgcolor='white',
+    paper_bgcolor='white',
+    font=dict(color='black')
 )
 
 st.plotly_chart(fig, use_container_width=True, config={"scrollZoom": True})
