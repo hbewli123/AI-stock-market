@@ -451,9 +451,11 @@ for i in range(len(data) - 365):
             h_year = (hist_365.iloc[-1] - hist_365.iloc[0]) / hist_365.iloc[0]
             
             h_momentum = (h_month * 0.5 + h_quarter * 0.3 + h_year * 0.2)
-            h_annual_growth = max(0.10, abs(h_momentum) * 0.4)
+            
+            # More realistic growth expectations (less optimistic)
+            h_annual_growth = abs(h_momentum) * 0.25  # Reduced from 0.4
             if h_momentum < 0:
-                h_annual_growth = max(0.05, abs(h_momentum) * 0.2)
+                h_annual_growth = h_momentum * 0.15  # Allow negative growth
             
             # Show what we would have predicted for 1 year out from each point
             base_price = data['Close'].iloc[i]
