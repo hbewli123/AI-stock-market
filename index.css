@@ -1,0 +1,50 @@
+:root {
+  --bg-primary: #080b0f;
+  --bg-secondary: #0d1117;
+  --bg-card: #111820;
+  --bg-hover: #161d27;
+  --border: #1e2d3d;
+  --border-bright: #2a3f55;
+  --accent: #00d4aa;
+  --accent-dim: #00a882;
+  --accent-glow: rgba(0, 212, 170, 0.15);
+  --accent-glow-bright: rgba(0, 212, 170, 0.3);
+  --red: #ff4d6d;
+  --red-dim: #c73a52;
+  --green: #00d4aa;
+  --yellow: #ffd166;
+  --blue: #4da6ff;
+  --purple: #b56bff;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #484f58;
+  --font-display: 'Syne', sans-serif;
+  --font-mono: 'Space Mono', monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+
+::selection {
+  background: var(--accent-glow-bright);
+  color: var(--accent);
+}
