@@ -1,1 +1,1 @@
-# AI-stock-market
+# AI-stock-analyzer
